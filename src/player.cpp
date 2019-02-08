@@ -5,9 +5,16 @@
 #define VS1053_CS     D1
 #define VS1053_DCS    D0
 #define VS1053_DREQ   D3
+#define LOCATION "Location"
+
+
 
 // Default volume
 const short startVOLUME = 75;
+static int oldstatus=0;
+
+const char * headerkeys[] = {"Location","ice-audio-info","icy-genre","ice-name","Content-Type","Connection"} ;
+size_t headerkeyssize = sizeof(headerkeys)/sizeof(char*);
 
 VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
 
@@ -20,10 +27,9 @@ short currentplaylist=0;
 short VOLUME;
 
 WiFiClient client;
+HTTPClient http;
 
-char host[100] = "mp3channels.webradio.rockantenne.de";
-char path[200] = "/rockantenne";
-int httpPort = 80;
+
 File fsUploadFile; 
 uint8_t mp3buff[32];
 
@@ -46,7 +52,7 @@ void SetVolume(short volume)
 // ################# WEB ###################
 
 void handleRootPath() {
-  Console::info("handleRootPath");
+   Console::info("handleRootPath");
    server.send(200, "text/html", prepareHtmlPage());
 }
 
@@ -55,19 +61,8 @@ void handleLinks() {
     currentplaylist--;
     if (currentplaylist<0) currentplaylist=playlistcounter;
     Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
-      Serial.println(playlist[currentplaylist]);
-      URL url;
-      url = parseURL(playlist[currentplaylist]);
-      if (url.isValid) {
-        url.host.toCharArray(host, 100);
-        url.path.toCharArray(path, 200);
-        client.stop();
-      }
-      else
-      {
-        Console::error("ungültige URL ");
-        Serial.println(playlist[currentplaylist]);
-      }
+    Serial.println(playlist[currentplaylist]);
+    client.stop();
     server.sendHeader("Location","/");      // Redirect the client to the success page
     server.send(303);
       //server.send(200, "text/html", prepareHtmlPage());
@@ -78,20 +73,8 @@ void handleRechts() {
     currentplaylist++;
     if (currentplaylist>=playlistcounter) currentplaylist=0;
     Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
-      Serial.println(playlist[currentplaylist]);
-      URL url;
-      url = parseURL(playlist[currentplaylist]);
-      if (url.isValid) {
-        url.host.toCharArray(host, 100);
-        url.path.toCharArray(path, 200);
-        client.stop();
-      }
-      else
-      {
-        Console::error("ungültige URL ");
-        Serial.println(playlist[currentplaylist]);
-      }
-
+    Serial.println(playlist[currentplaylist]);
+    client.stop();
     server.sendHeader("Location","/");      // Redirect the client to the success page
     server.send(303);
 }
@@ -183,8 +166,6 @@ short filesuccess = SPIFFS.begin();
               Console::error("file open failed");
             }
             else {
-              f.println(host);
-              f.println(path);
               f.close();
             }
           }     
@@ -226,36 +207,58 @@ void FileFS_Load()
 
       if (playlistcounter>0) {
       Console::info("choose playlist 1 from %d", playlistcounter);
-      Serial.println(playlist[currentplaylist]);
-      URL url;
-      url = parseURL(playlist[currentplaylist]);
-      if (url.isValid) {
-        url.host.toCharArray(host, 100);
-        url.path.toCharArray(path, 200);
-      }
-      else
-      {
-        Console::error("ungültige URL ");
-        Serial.println(playlist[currentplaylist]);
-      }    
+      Serial.println(playlist[currentplaylist]);   
     }
 }
 
 void Stream_Connect() {
-    Console::info("connecting to %s", host);  
+    oldstatus=0;
+    Console::info("connecting to %s", playlist[currentplaylist].c_str());  
+    if (playlist[currentplaylist] == "")
+      {
+          Console::warn("empty playlist, switch to next");  
+          currentplaylist++;
+          if (currentplaylist>=playlistcounter) currentplaylist=0;
+          if (playlist[currentplaylist] == "")
+            return;
+          Console::info("connecting to %s", playlist[currentplaylist].c_str()); 
+      }
+    http.collectHeaders(headerkeys,headerkeyssize);  
+    bool result = http.begin(playlist[currentplaylist]);
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+        Console::info("connecting result %d",httpCode); 
+        if (httpCode== 302) {
+          if (http.hasHeader(LOCATION)) {
+            String uri = http.header(LOCATION);
+            Console::info("reconnecting to %s",uri.c_str()); 
+            http.end();
+            http.begin(uri);
+            playlist[currentplaylist] = uri;
+            httpCode = http.GET();
+            Console::info("redirection connecting result %d",httpCode); 
+          }
+          else
+          {
+            int headers = http.headers();
+            Console::info("redirection num headers %d",headers);
+            for (short i=0;i<headers;i++) {
+              Console::info("redirect header %s mit %s",http.headerName(i).c_str(),http.header(i).c_str());
+            }
 
-    if (!client.connect(host, httpPort)) {
-      Console::error("Connection failed");
-      return;
+            Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
+            playlist[currentplaylist] = "";
+          }
+          
+        }
+        client = http.getStream();
     }
-
-// wie bekommt man 302 mit?
-
-    Console::info("Requesting stream: %s",path);
+    else
+    {
+      Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
+      playlist[currentplaylist] = "";
+    }
     
-    client.print(String("GET ") + path + " HTTP/1.1\r\n" +
-                  "Host: " + host + "\r\n" + 
-                  "Connection: close\r\n\r\n");
 
 }
 
@@ -265,9 +268,16 @@ void Stream_Play() {
     if(!client.connected()){
         Stream_Connect();
     }
-  
+
+int newstatus = client.status();
+if(oldstatus != newstatus) {
+  oldstatus = newstatus;
+  Console::info("tcp status: %d", oldstatus);
+}
+
     if(client.available() > 0){
       uint8_t bytesread = client.read(mp3buff, 32);
+      //      Console::info("bytes %d",bytesread); 
       player.playChunk(mp3buff, bytesread);
     }
 }

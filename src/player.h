@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <VS1053.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
 #include <URL.h>
 #include <URLParser.h>
 #include <FS.h>   // Include the SPIFFS library
