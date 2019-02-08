@@ -1,0 +1,3 @@
+Rockantenne	http://mp3channels.webradio.rockantenne.de/rockantenne
+Mainfranken	http://br-br1-mainfranken.cast.addradio.de/br/br1/mainfranken/mp3/56/stream.mp3
+TopFM	http://mp3.topfm.c.nmdn.net/ps-topfm/livestream.mp3
