@@ -48,7 +48,6 @@
 
 #include <Arduino.h>
 
-#include <VS1053.h>
 #include <ESP8266WiFi.h>
 #include <ArduinoOTA.h>
 
@@ -58,14 +57,7 @@
 #include "player.h"
 #include "esp8266WebRadioDemo.h"
 
-#define VS1053_CS     D1
-#define VS1053_DCS    D0
-#define VS1053_DREQ   D3
-
-// Default volume
-const short startVOLUME = 75;
-
-VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
+// pins defined in player.cpp
     
 const char* wifihostname = "ESPRadio";
 
@@ -85,10 +77,6 @@ void setup () {
     Console::info("Simple Radio Node WiFi Radio");
   
     SPI.begin();
-
-    player.begin();
-     //player.switchToMp3Mode();
-    SetVolume(startVOLUME);
 
     Console::info("Connecting to SSID %s", WIFI_SSID);
     WiFi.hostname(wifihostname);  

@@ -2,7 +2,15 @@
 
 #include "player.h"
 
-extern VS1053 player;
+#define VS1053_CS     D1
+#define VS1053_DCS    D0
+#define VS1053_DREQ   D3
+
+// Default volume
+const short startVOLUME = 75;
+
+VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
+
 extern ESP8266WebServer server;
 
 String playlist[10];
@@ -13,12 +21,18 @@ short VOLUME;
 
 WiFiClient client;
 
-//  http://comet.shoutca.st:8563/1
 char host[100] = "mp3channels.webradio.rockantenne.de";
 char path[200] = "/rockantenne";
 int httpPort = 80;
 File fsUploadFile; 
 uint8_t mp3buff[32];
+
+void playerbegin() {
+  player.begin();
+     //player.switchToMp3Mode();
+  SetVolume(startVOLUME);
+}
+
 
 void SetVolume(short volume)
 {

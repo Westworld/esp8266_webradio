@@ -21,4 +21,5 @@ void FileFS_Load();
 String getValue(String data, char separator, int index);
 void Stream_Connect();
 void Stream_Play();
+void playerbegin();
 #endif
