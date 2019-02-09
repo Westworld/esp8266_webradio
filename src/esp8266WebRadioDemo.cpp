@@ -129,6 +129,8 @@ void setup () {
     FileFS_Init();
     FileFS_Load();
 
+    playerbegin();
+
     server.on("/", handleRootPath);
     server.on("/Links", handleLinks);
     server.on("/Rechts", handleRechts);

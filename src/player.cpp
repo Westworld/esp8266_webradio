@@ -35,8 +35,11 @@ uint8_t mp3buff[32];
 
 void playerbegin() {
   player.begin();
-     //player.switchToMp3Mode();
+  player.switchToMp3Mode();
   SetVolume(startVOLUME);
+  bool result = player.isChipConnected();
+  if (!result)
+    Console::error("mp3 chip not connected!");
 }
 
 
@@ -270,10 +273,6 @@ void Stream_Play() {
     }
 
 int newstatus = client.status();
-if(oldstatus != newstatus) {
-  oldstatus = newstatus;
-  Console::info("tcp status: %d", oldstatus);
-}
 
     if(client.available() > 0){
       uint8_t bytesread = client.read(mp3buff, 32);
