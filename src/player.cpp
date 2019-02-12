@@ -25,7 +25,8 @@ String playliststation[10];
 short playlistcounter=0;
 short currentplaylist=0;
 short VOLUME;
-
+bool DoNotReportError = false;
+ 
 WiFiClient client;
 HTTPClient http;
 
@@ -214,55 +215,66 @@ void FileFS_Load()
     }
 }
 
-void Stream_Connect() {
-    oldstatus=0;
+void Stream_Connect() 
+{
+    short AllSenderTested = 0;
     Console::info("connecting to %s", playlist[currentplaylist].c_str());  
     if (playlist[currentplaylist] == "")
       {
-          Console::warn("empty playlist, switch to next");  
-          currentplaylist++;
-          if (currentplaylist>=playlistcounter) currentplaylist=0;
-          if (playlist[currentplaylist] == "")
-            return;
-          Console::info("connecting to %s", playlist[currentplaylist].c_str()); 
-      }
-    http.collectHeaders(headerkeys,headerkeyssize);  
-    bool result = http.begin(playlist[currentplaylist]);
-    int httpCode = http.GET();
-    if (httpCode > 0) {
-        Console::info("connecting result %d",httpCode); 
-        if (httpCode== 302) {
-          if (http.hasHeader(LOCATION)) {
-            String uri = http.header(LOCATION);
-            Console::info("reconnecting to %s",uri.c_str()); 
-            http.end();
-            http.begin(uri);
-            playlist[currentplaylist] = uri;
-            httpCode = http.GET();
-            Console::info("redirection connecting result %d",httpCode); 
-          }
-          else
-          {
-            int headers = http.headers();
-            Console::info("redirection num headers %d",headers);
-            for (short i=0;i<headers;i++) {
-              Console::info("redirect header %s mit %s",http.headerName(i).c_str(),http.header(i).c_str());
+          if (!DoNotReportError)
+            Console::warn("empty playlist, switch to next");  
+            while ((playlist[currentplaylist] == "") & (AllSenderTested <2)) {
+                currentplaylist++;
+                if (currentplaylist>=playlistcounter) 
+                    { currentplaylist=0; AllSenderTested++; }
             }
-
-            Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
-            playlist[currentplaylist] = "";
-          }
           
+          if (playlist[currentplaylist] == "")
+            { DoNotReportError = true; return; }
+          else
+            Console::info("connecting to %s", playlist[currentplaylist].c_str()); 
+      }
+
+
+    if (playlist[currentplaylist] != "")  {
+        http.collectHeaders(headerkeys,headerkeyssize);  
+        http.begin(playlist[currentplaylist]);
+        int httpCode = http.GET();
+        if (httpCode > 0) {
+            Console::info("connecting result %d",httpCode); 
+            if (httpCode == 302) {
+              if (http.hasHeader(LOCATION)) {
+                String uri = http.header(LOCATION);
+                Console::info("reconnecting to %s",uri.c_str()); 
+                http.end();
+                http.begin(uri);
+                playlist[currentplaylist] = uri;
+                httpCode = http.GET();
+                Console::info("redirection connecting result %d",httpCode); 
+              }
+              else
+              {
+                int headers = http.headers();
+                Console::info("redirection num headers %d",headers);
+                for (short i=0;i<headers;i++) {
+                  Console::info("redirect header %s mit %s",http.headerName(i).c_str(),http.header(i).c_str());
+              }
+
+              Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
+              playlist[currentplaylist] = "";
+            }  // 302
+              
+          } // http >0
+
+          if (httpCode == 200) 
+            client = http.getStream(); 
         }
-        client = http.getStream();
-    }
     else
     {
       Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
       playlist[currentplaylist] = "";
     }
-    
-
+  }
 }
 
 
@@ -272,12 +284,14 @@ void Stream_Play() {
         Stream_Connect();
     }
 
-int newstatus = client.status();
+ //Serial.print("."); 
 
     if(client.available() > 0){
       uint8_t bytesread = client.read(mp3buff, 32);
-      //      Console::info("bytes %d",bytesread); 
+      if (bytesread != 32)
+        Console::info("bytesread %d ********", bytesread); 
       player.playChunk(mp3buff, bytesread);
+      //delay(1000);
     }
 }
 
