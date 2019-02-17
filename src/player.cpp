@@ -7,11 +7,7 @@
 #define VS1053_DREQ   D3
 #define LOCATION "Location"
 
-enum datamode_t { DATA = 4,          // State for datastream
-                  METADATA = 8, PLAYLISTINIT = 16,
-                  PLAYLISTHEADER = 32, PLAYLISTDATA = 64,
-                  STOPREQD = 128, STOPPED = 256
-                } ;
+
 
 // Default volume
 const short startVOLUME = 75;
@@ -19,18 +15,7 @@ static int oldstatus=0;
 
 const char * headerkeys[] = {"Location","ice-audio-info","icy-genre","ice-name","icy-metaint","Content-Type","Connection","transfer-encoding"} ;
 size_t headerkeyssize = sizeof(headerkeys)/sizeof(char*);
-bool             chunked = false ;                         // Station provides chunked transfer
-int              chunkcount = 0 ;                          // Counter for chunked transfer
-datamode_t       datamode ;                                // State of datastream
-int              metaint = 0 ;                             // Number of databytes between metadata
-uint32_t         totalcount = 0 ;                          // Counter mp3 data                               // State of datastream
-int              metacount ;                               // Number of bytes in metadata
-int              datacount ;                               // Counter databytes before metadata
-String           metaline ;                                // Readable line in metadata
-bool             firstchunk = true ;                 // First chunk as input
-int8_t           playlist_num = 0 ;                        // Nonzero for selection from playlist
-int              bufcnt = 0 ;                        // Data in chunk
- 
+
 
 VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
 extern ESP8266WebServer server;
@@ -49,6 +34,7 @@ HTTPClient http;
 
 File fsUploadFile; 
 uint8_t mp3buff[32];
+long metaint;
 
 void playerbegin() {
   player.begin();
@@ -234,24 +220,25 @@ void FileFS_Load()
 void Stream_Connect() 
 {
     short AllSenderTested = 0;
+    metaint = 0;
     http.end();
 
     Console::info("connecting to %s", playlist[currentplaylist].c_str());  
     if (playlist[currentplaylist] == "")
-      {
-          if (!DoNotReportError)
-            Console::warn("empty playlist, switch to next");  
-            while ((playlist[currentplaylist] == "") & (AllSenderTested <2)) {
-                currentplaylist++;
-                if (currentplaylist>=playlistcounter) 
-                    { currentplaylist=0; AllSenderTested++; }
-            }
-          
-          if (playlist[currentplaylist] == "")
-            { DoNotReportError = true; return; }
-          else
-            Console::info("connecting to %s", playlist[currentplaylist].c_str()); 
-      }
+              {
+                  if (!DoNotReportError)
+                    Console::warn("empty playlist, switch to next");  
+                    while ((playlist[currentplaylist] == "") & (AllSenderTested <2)) {
+                        currentplaylist++;
+                        if (currentplaylist>=playlistcounter) 
+                            { currentplaylist=0; AllSenderTested++; }
+                    }
+                  
+                  if (playlist[currentplaylist] == "")
+                    { DoNotReportError = true; return; }
+                  else
+                    Console::info("connecting to %s", playlist[currentplaylist].c_str()); 
+              }
 
 
     if (playlist[currentplaylist] != "")  {
@@ -276,7 +263,7 @@ void Stream_Connect()
               {
                 int headers = http.headers();
                 Console::info("redirection num headers %d",headers);
-                for (short i=0;i<headers;i++) {
+                for (short i=0;i<headers;i++) 
                   Console::info("redirect header %s mit %s",http.headerName(i).c_str(),http.header(i).c_str());
               }
 
@@ -287,46 +274,27 @@ void Stream_Connect()
               
           } // http >0
 
-          if (httpCode == 200) {
-            metaint = 0 ;                                      // No metaint found
+          if (httpCode == 200) {                                    // No metaint found
             int headers = http.headers();
             for (short i=0;i<headers;i++) {
-              Console::info("header %s: %s",http.headerName(i).c_str(), http.header(i).c_str());
+                      Console::info("header %s: %s",http.headerName(i).c_str(), http.header(i).c_str());
 
-              if (http.headerName(i) == "ice-audio-info")
-                ice_audio_info = http.header(i);
-              else if (http.headerName(i) == "icy_genre")
-                ice_audio_info = http.header(i);
-              else if (http.headerName(i) == "ice_name")
-                ice_name = http.header(i);
-              else if (http.headerName(i) == "icy-metaint")
-                metaint = http.header(i).substring(12).toInt() ;   // Found metaint tag, read the value
-              else if (http.headerName(i) == "transfer-encoding") {
-                if ( http.header(i).endsWith ( "chunked" ) )
-                {
-                  chunked = true ;                           // Remember chunked transfer mode
-                  chunkcount = 0 ;                           // Expect chunkcount in DATA
-                }
-                else
-                {
-                    chunked = false;
-                }
-                
-              }
+                      if (http.headerName(i) == "ice-audio-info")
+                        ice_audio_info = http.header(i);
+                      else if (http.headerName(i) == "icy_genre")
+                        ice_audio_info = http.header(i);
+                      else if (http.headerName(i) == "ice_name")
+                        ice_name = http.header(i);
+                      else if (http.headerName(i) == "icy-metaint") {
+                        metaint = http.header(i).substring(12).toInt() ;   // Found metaint tag, read the value 
+                        Console::info("metaint found %d",metaint);
+                        }              
+                      }  // loop headers
 
-             } 
            Console::info("audio-info: %s, genre: %s, name %s",ice_audio_info.c_str(),
-                icy_genre.c_str(), ice_name.c_str());  
-            datacount = metaint ;                          // Number of bytes before first metadata
-            bufcnt = 0 ;                                   // Reset buffer count            
-            datamode = DATA ;                                // Handle header
-            totalcount = 0 ;                                   // Reset totalcount
-            metaline = "" ;                                    // No metadata yet
-            firstchunk = true ;                                // First chunk expected
- 
+                icy_genre.c_str(), ice_name.c_str());   
             client = http.getStream(); 
-          }
-        }
+          } // http 200
     else
     {
       Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
@@ -348,10 +316,11 @@ void Stream_Play() {
       uint8_t bytesread = client.read(mp3buff, 32);
   //    if (bytesread != 32)
   //      Console::info("bytesread %d ********", bytesread); 
-      //player.playChunk(mp3buff, bytesread);
+      
       for (uint8_t i=0;i<bytesread;i++) {
-        handlebyte_ch ( mp3buff[i], false );
+        //handlebyte_ch ( mp3buff[i], false );
       }
+      player.playChunk(mp3buff, bytesread);
     }
 }
 
@@ -371,244 +340,4 @@ String getValue(String data, char separator, int index)
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
-//**************************************************************************************************
-//                                   H A N D L E B Y T E _ C H                                     *
-//**************************************************************************************************
-// Handle the next byte of data from server.                                                       *
-// Chunked transfer encoding aware. Chunk extensions are not supported.                            *
-//**************************************************************************************************
-void handlebyte_ch ( uint8_t b, bool force )
-{
-  static int  chunksize = 0 ;                         // Chunkcount read from stream
-
-  if ( chunked && !force &&
-       ( datamode & ( DATA |                          // Test op DATA handling
-                      METADATA |
-                      PLAYLISTDATA ) ) )
-  {
-    if ( chunkcount == 0 )                            // Expecting a new chunkcount?
-    {
-      if ( b == '\r' )                               // Skip CR
-      {
-        return ;
-      }
-      else if ( b == '\n' )                          // LF ?
-      {
-        chunkcount = chunksize ;                     // Yes, set new count
-        chunksize = 0 ;                              // For next decode
-        return ;
-      }
-      // We have received a hexadecimal character.  Decode it and add to the result.
-      b = toupper ( b ) - '0' ;                      // Be sure we have uppercase
-      if ( b > 9 )
-      {
-        b = b - 7 ;                                  // Translate A..F to 10..15
-      }
-      chunksize = ( chunksize << 4 ) + b ;
-    }
-    else
-    {
-      handlebyte ( b, force ) ;                       // Normal data byte
-      chunkcount-- ;                                  // Update count to next chunksize block
-    }
-  }
-  else
-  {
-    handlebyte ( b, force ) ;                         // Normal handling of this byte
-  }
-}
-
-
-//**************************************************************************************************
-//                                   H A N D L E B Y T E                                           *
-//**************************************************************************************************
-// Handle the next byte of data from server.                                                       *
-// This byte will be send to the VS1053 most of the time.                                          *
-// Note that the buffer the data chunk must start at an address that is a muttiple of 4.           *
-// Set force to true if chunkbuffer must be flushed.                                               *
-//**************************************************************************************************
-void handlebyte ( uint8_t b, bool force )
-{
-  static uint16_t  playlistcnt ;                       // Counter to find right entry in playlist
-  static bool      firstmetabyte ;                     // True if first metabyte (counter)
-  static int       LFcount ;                           // Detection of end of header
-  static __attribute__((aligned(4))) uint8_t buf[32] ; // Buffer for chunk
-  String           lcml ;                              // Lower case metaline
-  String           ct ;                                // Contents type
-  static bool      ctseen = false ;                    // First line of header seen or not
-  int              inx ;                               // Pointer in metaline
-  int              i ;                                 // Loop control
-
-
-  if ( datamode == DATA )                              // Handle next byte of MP3/Ogg data
-  {
-    buf[bufcnt++] = b ;                                // Save byte in chunkbuffer
-    if ( bufcnt == sizeof(buf) || force )              // Buffer full?
-    {
-      if ( firstchunk )
-      {
-        firstchunk = false ;
-        Console::info("First chunk");
-      }
-      totalcount += bufcnt ;                           // Count number of bytes, ignore overflow
-      player.playChunk ( buf, bufcnt ) ;         // Yes, send to player
-      bufcnt = 0 ;                                     // Reset count
-    }
-    if ( metaint != 0 )                                // No METADATA on Ogg streams or mp3 files
-      {
-        if ( --datacount == 0 )                          // End of datablock?
-        {
-          if ( bufcnt )                                  // Yes, still data in buffer?
-          {
-            totalcount += bufcnt ;                       // Count number of bytes, ignore overflow
-            player.playChunk ( buf, bufcnt ) ;     // Yes, send to player
-            bufcnt = 0 ;                                 // Reset count
-          }
-          datamode = METADATA ;
-          firstmetabyte = true ;                         // Expecting first metabyte (counter)
-        }
-      }
-     return ;
-  }
-
-  if ( datamode == METADATA )                          // Handle next byte of metadata
-  {
-    if ( firstmetabyte )                               // First byte of metadata?
-    {
-      firstmetabyte = false ;                          // Not the first anymore
-      metacount = b * 16 + 1 ;                         // New count for metadata including length byte
-      if ( metacount > 1 )
-      {
-        Console::info("Metadata block %d bytes", metacount - 1 ); // Most of the time there are zero bytes of metadata
-      }
-      metaline = "" ;                                  // Set to empty
-    }
-    else
-    {
-      metaline += (char)b ;                            // Normal character, put new char in metaline
-    }
-    if ( --metacount == 0 )
-    {
-      if ( metaline.length() )                         // Any info present?
-      {
-        // metaline contains artist and song name.  For example:
-        // "StreamTitle='Don McLean - American Pie';StreamUrl='';"
-        // Sometimes it is just other info like:
-        // "StreamTitle='60s 03 05 Magic60s';StreamUrl='';"
-        // Isolate the StreamTitle, remove leading and trailing quotes if present.
-        streammetadata = metaline;
-        Console::info("Stream meta data %s", metaline.c_str() ) ;         // Show artist and title if present in metadata
-      }
-      if ( metaline.length() > 1500 )                  // Unlikely metaline length?
-      {
-        Console::info("Metadata block too long! Skipping all Metadata from now on." ) ;
-        metaint = 0 ;                                  // Probably no metadata
-        metaline = "" ;                                // Do not waste memory on this
-      }
-      datacount = metaint ;                            // Reset data count
-      bufcnt = 0 ;                                     // Reset buffer count
-      datamode = DATA ;                                // Expecting data
-    }
-  }
-  if ( datamode == PLAYLISTINIT )                      // Initialize for receive .m3u file
-  {
-    // We are going to use metadata to read the lines from the .m3u file
-    // Sometimes this will only contain a single line
-    metaline = "" ;                                    // Prepare for new line
-    LFcount = 0 ;                                      // For detection end of header
-    datamode = PLAYLISTHEADER ;                        // Handle playlist data
-    playlistcnt = 1 ;                                  // Reset for compare
-    totalcount = 0 ;                                   // Reset totalcount
-    Console::info("Read from playlist" ) ;
-  }
-  if ( datamode == PLAYLISTHEADER )                    // Read header
-  {
-    if ( ( b > 0x7F ) ||                               // Ignore unprintable characters
-         ( b == '\r' ) ||                              // Ignore CR
-         ( b == '\0' ) )                               // Ignore NULL
-    {
-      // Yes, ignore
-    }
-    else if ( b == '\n' )                              // Linefeed ?
-    {
-      LFcount++ ;                                      // Count linefeeds
-      Console::info( "Playlistheader: %s",                 // Show playlistheader
-                 metaline.c_str() ) ;
-      metaline = "" ;                                  // Ready for next line
-      if ( LFcount == 2 )
-      {
-        Console::info(  "Switch to PLAYLISTDATA" ) ;
-        datamode = PLAYLISTDATA ;                      // Expecting data now
-        return ;
-      }
-    }
-    else
-    {
-      metaline += (char)b ;                            // Normal character, put new char in metaline
-      LFcount = 0 ;                                    // Reset double CRLF detection
-    }
-  }
-  if ( datamode == PLAYLISTDATA )                      // Read next byte of .m3u file data
-  {
-    if ( ( b > 0x7F ) ||                               // Ignore unprintable characters
-         ( b == '\r' ) ||                              // Ignore CR
-         ( b == '\0' ) )                               // Ignore NULL
-    {
-      // Yes, ignore
-    }
-    else if ( b == '\n' )                              // Linefeed ?
-    {
-      Console::info("Playlistdata: %s",                   // Show playlistheader
-                 metaline.c_str() ) ;
-      if ( metaline.length() < 5 )                     // Skip short lines
-      {
-        metaline = "" ;                                // Flush line
-        return ;
-      }
-      if ( metaline.indexOf ( "#EXTINF:" ) >= 0 )      // Info?
-      {
-        if ( playlist_num == playlistcnt )             // Info for this entry?
-        {
-          inx = metaline.indexOf ( "," ) ;             // Comma in this line?
-          if ( inx > 0 )
-          {
-            // Show artist and title if present in metadata
-            streammetadata = metaline.substring ( inx + 1 );
-            Console::info("Stream meta data %s", streammetadata.c_str() ) ;         // Show artist and title if present in metadata
-          }
-        }
-      }
-      if ( metaline.startsWith ( "#" ) )               // Commentline?
-      {
-        metaline = "" ;
-        return ;                                       // Ignore commentlines
-      }
-      // Now we have an URL for a .mp3 file or stream.  Is it the rigth one?
-      Console::info("Entry %d in playlist found: %s", playlistcnt, metaline.c_str() ) ;
-      Console::error("missing code ***** " ) ;
-      /*if ( playlist_num == playlistcnt  )
-      {
-        inx = metaline.indexOf ( "http://" ) ;         // Search for "http://"
-        if ( inx >= 0 )                                // Does URL contain "http://"?
-        {
-          host = metaline.substring ( inx + 7 ) ;      // Yes, remove it and set host
-        }
-        else
-        {
-          host = metaline ;                            // Yes, set new host
-        }
-        connecttohost() ;                              // Connect to it
-      }
-      metaline = "" ;
-      host = playlist ;                                // Back to the .m3u host
-      playlistcnt++ ;                                  // Next entry in playlist
-      */
-    }
-    else
-    {
-      metaline += (char)b ;                            // Normal character, add it to metaline
-    }
-    return ;
-  }
-}
 
