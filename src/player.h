@@ -23,4 +23,6 @@ String getValue(String data, char separator, int index);
 void Stream_Connect();
 void Stream_Play();
 void playerbegin();
+void handlebyte ( uint8_t b, bool force );
+void handlebyte_ch ( uint8_t b, bool force );
 #endif
