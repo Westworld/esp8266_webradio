@@ -194,7 +194,7 @@ void FileFS_Load()
         {
           line = f.readStringUntil('\n');
           if (line.length() != 0) {
-            Serial.println(line);
+            //Serial.println(line);
             if (playlistcounter<10) {
               // zerlegen nach Name, tab, sender
               line.trim();
@@ -218,6 +218,8 @@ void FileFS_Load()
 void Stream_Connect() 
 {
     short AllSenderTested = 0;
+    http.end();
+    
     Console::info("connecting to %s", playlist[currentplaylist].c_str());  
     if (playlist[currentplaylist] == "")
       {
@@ -248,6 +250,7 @@ void Stream_Connect()
                 Console::info("reconnecting to %s",uri.c_str()); 
                 http.end();
                 http.begin(uri);
+                Console::warn("overwriting playlist %s with %s",playlist[currentplaylist].c_str(), uri.c_str()); 
                 playlist[currentplaylist] = uri;
                 httpCode = http.GET();
                 Console::info("redirection connecting result %d",httpCode); 
@@ -261,6 +264,7 @@ void Stream_Connect()
               }
 
               Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
+              Console::warn("overwriting playlist %s with ''",playlist[currentplaylist].c_str()); 
               playlist[currentplaylist] = "";
             }  // 302
               
@@ -272,6 +276,7 @@ void Stream_Connect()
     else
     {
       Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
+      Console::warn("overwriting playlist %s with ''",playlist[currentplaylist].c_str()); 
       playlist[currentplaylist] = "";
     }
   }
@@ -281,17 +286,15 @@ void Stream_Connect()
 void Stream_Play() {
 
     if(!client.connected()){
+        http.end();
         Stream_Connect();
     }
 
- //Serial.print("."); 
-
     if(client.available() > 0){
       uint8_t bytesread = client.read(mp3buff, 32);
-      if (bytesread != 32)
-        Console::info("bytesread %d ********", bytesread); 
+  //    if (bytesread != 32)
+  //      Console::info("bytesread %d ********", bytesread); 
       player.playChunk(mp3buff, bytesread);
-      //delay(1000);
     }
 }
 

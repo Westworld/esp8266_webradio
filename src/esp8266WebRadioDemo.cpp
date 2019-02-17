@@ -136,6 +136,9 @@ void setup () {
     server.on("/Rechts", handleRechts);
     server.on("/Lauter", handleLauter);
     server.on("/Leiser", handleLeiser);
+    server.onNotFound([](){
+      server.send(404, "text/plain", "404: Not found");
+      });
     server.on("/Upload", HTTP_POST,                       // if the client posts to the upload page
       [](){ server.send(200); },                          // Send status 200 (OK) to tell the client we are ready to receive
       handleFileUpload                                    // Receive and save the file
