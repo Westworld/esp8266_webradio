@@ -225,6 +225,7 @@ void Stream_Connect()
     short AllSenderTested = 0;
     metaint = 0;
     http.end();
+    player.stopSong();
 
     Console::info("connecting to %s", playlist[currentplaylist].c_str());  
     if (playlist[currentplaylist] == "")
@@ -297,6 +298,7 @@ void Stream_Connect()
            Console::info("audio-info: %s, genre: %s, name %s",ice_audio_info.c_str(),
                 icy_genre.c_str(), ice_name.c_str());   
             client = http.getStream(); 
+            player.startSong();
           } // http 200
     else
     {
@@ -318,9 +320,8 @@ void Stream_Play() {
     if(client.available() > 0){
       uint8_t bytesread = client.read(mp3buff, 32);
 
-      short counter=0;
       for (uint8_t i=0;i<bytesread;i++) {
-        counter += handlebyte ( mp3buff[i] );
+        handlebyte ( mp3buff[i] );
       }
       player.playChunk(mp3buff, bytesread);
 
@@ -343,9 +344,7 @@ String getValue(String data, char separator, int index)
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
-short handlebyte ( uint8_t b ) {
-  short result = 0;
-
+void handlebyte ( uint8_t b ) {
 //  mediacounter++;
   if ((b == tagheader[tagsize]) || (tagsize > 11)) {
       tagvalue[tagcounter++] = b;
@@ -372,7 +371,5 @@ short handlebyte ( uint8_t b ) {
     tagsize = 0;
     tagcounter = 0;
   }
-  return result;
-
 }
 

@@ -23,5 +23,5 @@ String getValue(String data, char separator, int index);
 void Stream_Connect();
 void Stream_Play();
 void playerbegin();
-short handlebyte ( uint8_t b );
+void handlebyte ( uint8_t b );
 #endif
