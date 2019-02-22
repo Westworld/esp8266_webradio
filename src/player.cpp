@@ -11,11 +11,14 @@
 
 // Default volume
 const short startVOLUME = 75;
-static int oldstatus=0;
+int oldstatus=0;
 
 const char * headerkeys[] = {"Location","ice-audio-info","icy-genre","ice-name","icy-metaint","Content-Type","Connection","transfer-encoding"} ;
 size_t headerkeyssize = sizeof(headerkeys)/sizeof(char*);
 
+const char tagheader[] = "StreamTitle=";
+short tagsize = 0, tagcounter = 0;
+char  tagvalue[255];
 
 VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
 extern ESP8266WebServer server;
@@ -27,14 +30,14 @@ short playlistcounter=0;
 short currentplaylist=0;
 short VOLUME;
 bool DoNotReportError = false;
- 
+long mediacounter = 0;
+long metaint;
+
 WiFiClient client;
 HTTPClient http;
 
-
 File fsUploadFile; 
 uint8_t mp3buff[32];
-long metaint;
 
 void playerbegin() {
   player.begin();
@@ -243,8 +246,8 @@ void Stream_Connect()
 
     if (playlist[currentplaylist] != "")  {
         http.collectHeaders(headerkeys,headerkeyssize);  
-        http.addHeader("Icy-MetaData", "1");
         http.begin(playlist[currentplaylist]);
+        http.addHeader("Icy-MetaData", "1");
         int httpCode = http.GET();
         if (httpCode > 0) {
             Console::info("connecting result %d",httpCode); 
@@ -286,7 +289,7 @@ void Stream_Connect()
                       else if (http.headerName(i) == "ice_name")
                         ice_name = http.header(i);
                       else if (http.headerName(i) == "icy-metaint") {
-                        metaint = http.header(i).substring(12).toInt() ;   // Found metaint tag, read the value 
+                        metaint = http.header(i).toInt();   // Found metaint tag, read the value 
                         Console::info("metaint found %d",metaint);
                         }              
                       }  // loop headers
@@ -314,13 +317,13 @@ void Stream_Play() {
 
     if(client.available() > 0){
       uint8_t bytesread = client.read(mp3buff, 32);
-  //    if (bytesread != 32)
-  //      Console::info("bytesread %d ********", bytesread); 
-      
+
+      short counter=0;
       for (uint8_t i=0;i<bytesread;i++) {
-        //handlebyte_ch ( mp3buff[i], false );
+        counter += handlebyte ( mp3buff[i] );
       }
       player.playChunk(mp3buff, bytesread);
+
     }
 }
 
@@ -340,4 +343,36 @@ String getValue(String data, char separator, int index)
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
+short handlebyte ( uint8_t b ) {
+  short result = 0;
+
+//  mediacounter++;
+  if ((b == tagheader[tagsize]) || (tagsize > 11)) {
+      tagvalue[tagcounter++] = b;
+      if (tagsize <= 11) {  // "StreamTitle="
+        tagsize++;
+      }
+      else {
+        if ((tagcounter > 250) || (b == 0) || (b == 59)) {
+          // wir haben einen Tag gefunden
+          tagcounter-=2;
+          if (tagcounter>14){
+            tagvalue[tagcounter] = 0;
+//          Console::info("MP3 Tag gefunden pos %d", mediacounter); 
+            Console::info("%s", &tagvalue[13]); 
+          }
+          tagsize = 0;
+          tagcounter = 0;
+//          mediacounter = 0;
+        }
+      }
+  }
+  else
+  {
+    tagsize = 0;
+    tagcounter = 0;
+  }
+  return result;
+
+}
 

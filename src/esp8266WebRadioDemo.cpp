@@ -82,9 +82,12 @@ void setup () {
     WiFi.hostname(wifihostname);  
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+    short counter = 0;
     while (WiFi.status() != WL_CONNECTED) {
       delay(500);
       Serial.print(".");
+      if (++counter > 50)
+        ESP.restart();
     }
 
     Console::info("WiFi connected");
