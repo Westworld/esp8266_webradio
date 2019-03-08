@@ -20,7 +20,7 @@ class Console
 public:
     static const ConsoleLogLevel logLevel = DEBUG;
 
-    static void begin(int baudRate = 115200);
+    static void begin(int baudRate=115200);
     static char *debug(const char *format, ...);
     static char *info(const char *format, ...);
     static char *warn(const char *format, ...);

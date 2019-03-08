@@ -24,4 +24,8 @@ void Stream_Connect();
 void Stream_Play();
 void playerbegin();
 void handlebyte ( uint8_t b );
+void sendCommand(const char* cmd);
+void sendCommandString(String cmd);
+String PreviousStation();
+String NextStation();
 #endif

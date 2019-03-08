@@ -1,6 +1,7 @@
 #include <Console.h>
 
 #include "player.h"
+#include <SoftwareSerial.h>
 
 #define VS1053_CS     D1
 #define VS1053_DCS    D0
@@ -22,6 +23,7 @@ char  tagvalue[255];
 
 VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
 extern ESP8266WebServer server;
+extern SoftwareSerial nexSerial;
 
 String ice_audio_info, icy_genre, ice_name, streammetadata;
 String playlist[10];
@@ -38,6 +40,8 @@ HTTPClient http;
 
 File fsUploadFile; 
 uint8_t mp3buff[32];
+
+
 
 void playerbegin() {
   player.begin();
@@ -58,6 +62,20 @@ void SetVolume(short volume)
     player.setVolume(VOLUME);
 }
 
+String PreviousStation() {
+    short prev = currentplaylist - 1;
+    //Console::info("PreviousStation %d",prev);
+    if (prev<0) prev=playlistcounter-1;
+    return playliststation[prev];
+}
+
+String NextStation() {
+    short prev = currentplaylist + 1;
+    //Console::info("NextStation %d",prev);
+    if (prev>=playlistcounter) prev=0;
+    return playliststation[prev];
+}
+
 // ################# WEB ###################
 
 void handleRootPath() {
@@ -68,7 +86,7 @@ void handleRootPath() {
 void handleLinks() {
     Console::info("links");
     currentplaylist--;
-    if (currentplaylist<0) currentplaylist=playlistcounter;
+    if (currentplaylist<0) currentplaylist=playlistcounter-1;
     Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
     Serial.println(playlist[currentplaylist]);
     client.stop();
@@ -246,6 +264,12 @@ void Stream_Connect()
 
 
     if (playlist[currentplaylist] != "")  {
+        // update buttons
+        String sendername = "b0.txt=\""+PreviousStation() +"\"";
+        sendCommandString(sendername); 
+        sendername = "b1.txt=\""+NextStation() +"\"";
+        sendCommandString(sendername); 
+
         http.collectHeaders(headerkeys,headerkeyssize);  
         http.begin(playlist[currentplaylist]);
         http.addHeader("Icy-MetaData", "1");
@@ -296,9 +320,15 @@ void Stream_Connect()
                       }  // loop headers
 
            Console::info("audio-info: %s, genre: %s, name %s",ice_audio_info.c_str(),
-                icy_genre.c_str(), ice_name.c_str());   
-            client = http.getStream(); 
-            player.startSong();
+                icy_genre.c_str(), ice_name.c_str()); 
+
+           String sendername = "t0.txt=\""+playliststation[currentplaylist] +"\"";
+           sendCommandString(sendername); 
+           sendername = "t1.txt=\""+icy_genre+" "+ice_name+"\"";
+           sendCommandString(sendername); 
+
+           client = http.getStream(); 
+           player.startSong();
           } // http 200
     else
     {
@@ -359,6 +389,25 @@ void handlebyte ( uint8_t b ) {
             tagvalue[tagcounter] = 0;
 //          Console::info("MP3 Tag gefunden pos %d", mediacounter); 
             Console::info("%s", &tagvalue[13]); 
+
+            char buffer[200];
+            strncpy(buffer, &tagvalue[13], 200);
+            String title1="";
+            String title2="";
+            String title = buffer;
+            short pos = title.indexOf("-");
+            if (pos>0) {
+              title1=title.substring(0,pos-1);
+              title2=title.substring(pos+1);
+            }
+            else
+            {
+              title1 = title;
+            }
+            title = "t2.txt=\""+title1 +"\"";
+            sendCommandString(title);
+            title = "t3.txt=\""+title2 +"\"";
+            sendCommandString(title);
           }
           tagsize = 0;
           tagcounter = 0;
@@ -373,3 +422,37 @@ void handlebyte ( uint8_t b ) {
   }
 }
 
+
+
+void sendCommand(const char* cmd)
+{
+   int incomingByte = 0;
+   
+   while (nexSerial.available())
+    {
+        incomingByte = nexSerial.read();
+    }
+    
+    nexSerial.print(cmd);
+    nexSerial.write(0xFF);
+    nexSerial.write(0xFF);
+    nexSerial.write(0xFF);
+}
+
+void sendCommandString(String cmd)
+{
+    int incomingByte = 0;
+    while (nexSerial.available())
+    {
+        incomingByte = nexSerial.read();
+    }
+
+    for (unsigned int i = 0; i < cmd.length(); i++)
+    {
+      nexSerial.write(cmd[i]);   // Push each char 1 by 1 on each loop pass
+    }
+  
+    nexSerial.write(0xFF);
+    nexSerial.write(0xFF);
+    nexSerial.write(0xFF);
+}

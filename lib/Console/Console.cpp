@@ -40,6 +40,8 @@ char *Console::appendEntry(ConsoleLogLevel level, char *message)
                 Serial.println(message);
                 Serial.println();
                 break;
+            default:
+                break;    
         }
     }
     return message;

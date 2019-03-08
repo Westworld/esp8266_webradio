@@ -56,6 +56,7 @@
 
 #include "player.h"
 #include "esp8266WebRadioDemo.h"
+#include <SoftwareSerial.h>
 
 // pins defined in player.cpp
     
@@ -63,10 +64,17 @@ const char* wifihostname = "ESPRadio";
 
 ESP8266WebServer server(80); 
 
+SoftwareSerial nexSerial(D4, D2);
+
 void setup () {
     Console::begin();
     Console::line();
-    
+
+    nexSerial.begin(9600);
+    sendCommandString("t0.txt=\"Radio\"");
+    sendCommandString("t1.txt=\"starte\"");
+    sendCommandString("t2.txt=\"verbindung\"");
+
     // Wait for VS1053 and PAM8403 to power up
     // otherwise the system might not start up correctly
     delay(3000);
@@ -92,7 +100,10 @@ void setup () {
 
     Console::info("WiFi connected");
     IPAddress ip = WiFi.localIP();
-    Console::info("IP Address: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);  
+    Console::info("IP Address: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]); 
+    char buffer[100];
+    sprintf(buffer, "t0.txt=\"IP Address: %u.%u.%u.%u\"", ip[0], ip[1], ip[2], ip[3]); 
+    sendCommandString(buffer);
 
     ArduinoOTA.setHostname(wifihostname);  
     
@@ -156,8 +167,6 @@ void loop() {
 
     Stream_Play();
 }
-
-
 
 
 
