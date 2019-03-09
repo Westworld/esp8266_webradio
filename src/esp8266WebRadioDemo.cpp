@@ -62,6 +62,8 @@
     
 const char* wifihostname = "ESPRadio";
 
+
+
 ESP8266WebServer server(80); 
 
 SoftwareSerial nexSerial(D4, D2);
@@ -162,10 +164,40 @@ void setup () {
 }
 
 void loop() {
+
+  static short ButtonMessage=0;
+
     ArduinoOTA.handle();
     server.handleClient();
 
     Stream_Play();
+
+  if (nexSerial.available()) {  
+    short received = nexSerial.read();
+    
+    //Console::info("Serial %d %d", received, ButtonMessage);
+
+    if ((ButtonMessage==0) && (received == 101)) 
+      ButtonMessage++;
+    else 
+      if ((ButtonMessage==1) && (received == 0)) 
+        ButtonMessage++;
+        else 
+          if (ButtonMessage==2) {
+            if (received == 3) {
+              Console::info("Next");
+              NextStation();
+            }
+            else { 
+              Console::info("Previous");
+              PreviousStation();
+            }
+            ButtonMessage=0;
+          }
+          else
+            ButtonMessage=0;
+
+    }
 }
 
 

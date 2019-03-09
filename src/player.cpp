@@ -42,7 +42,6 @@ File fsUploadFile;
 uint8_t mp3buff[32];
 
 
-
 void playerbegin() {
   player.begin();
   player.switchToMp3Mode();
@@ -62,18 +61,34 @@ void SetVolume(short volume)
     player.setVolume(VOLUME);
 }
 
-String PreviousStation() {
+String PreviousStationName() {
     short prev = currentplaylist - 1;
     //Console::info("PreviousStation %d",prev);
     if (prev<0) prev=playlistcounter-1;
     return playliststation[prev];
 }
 
-String NextStation() {
+String NextStationName() {
     short prev = currentplaylist + 1;
     //Console::info("NextStation %d",prev);
     if (prev>=playlistcounter) prev=0;
     return playliststation[prev];
+}
+
+void PreviousStation() {
+    currentplaylist--;
+    if (currentplaylist<0) currentplaylist=playlistcounter-1;
+    Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
+    Serial.println(playlist[currentplaylist]);
+    client.stop();
+}
+
+void NextStation() {
+    currentplaylist++;
+    if (currentplaylist>=playlistcounter) currentplaylist=0;
+    Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
+    Serial.println(playlist[currentplaylist]);
+    client.stop();
 }
 
 // ################# WEB ###################
@@ -85,11 +100,7 @@ void handleRootPath() {
 
 void handleLinks() {
     Console::info("links");
-    currentplaylist--;
-    if (currentplaylist<0) currentplaylist=playlistcounter-1;
-    Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
-    Serial.println(playlist[currentplaylist]);
-    client.stop();
+    PreviousStation();
     server.sendHeader("Location","/");      // Redirect the client to the success page
     server.send(303);
       //server.send(200, "text/html", prepareHtmlPage());
@@ -97,11 +108,7 @@ void handleLinks() {
 }
 void handleRechts() {
     Console::info("rechts");
-    currentplaylist++;
-    if (currentplaylist>=playlistcounter) currentplaylist=0;
-    Console::info("choose playlist %d from %d", currentplaylist, playlistcounter);
-    Serial.println(playlist[currentplaylist]);
-    client.stop();
+    NextStation();
     server.sendHeader("Location","/");      // Redirect the client to the success page
     server.send(303);
 }
@@ -244,6 +251,10 @@ void Stream_Connect()
     metaint = 0;
     http.end();
     player.stopSong();
+    String title = "t2.txt=\" \"";
+    sendCommandString(title);
+    title = "t3.txt=\" \"";
+    sendCommandString(title);
 
     Console::info("connecting to %s", playlist[currentplaylist].c_str());  
     if (playlist[currentplaylist] == "")
@@ -265,9 +276,9 @@ void Stream_Connect()
 
     if (playlist[currentplaylist] != "")  {
         // update buttons
-        String sendername = "b0.txt=\""+PreviousStation() +"\"";
+        String sendername = "b0.txt=\""+PreviousStationName() +"\"";
         sendCommandString(sendername); 
-        sendername = "b1.txt=\""+NextStation() +"\"";
+        sendername = "b1.txt=\""+NextStationName() +"\"";
         sendCommandString(sendername); 
 
         http.collectHeaders(headerkeys,headerkeyssize);  
@@ -282,7 +293,7 @@ void Stream_Connect()
                 Console::info("reconnecting to %s",uri.c_str()); 
                 http.end();
                 http.begin(uri);
-                Console::warn("overwriting playlist %s with %s",playlist[currentplaylist].c_str(), uri.c_str()); 
+                Console::warn("overwriting playlist %s with '%s'",playlist[currentplaylist].c_str(), uri.c_str()); 
                 playlist[currentplaylist] = uri;
                 httpCode = http.GET();
                 Console::info("redirection connecting result %d",httpCode); 
@@ -296,8 +307,8 @@ void Stream_Connect()
               }
 
               Console::error("connecting failed %d %s",httpCode, http.errorToString(httpCode).c_str()); 
-              Console::warn("overwriting playlist %s with ''",playlist[currentplaylist].c_str()); 
-              playlist[currentplaylist] = "";
+              //Console::warn("overwriting playlist %s with ''",playlist[currentplaylist].c_str()); 
+              //playlist[currentplaylist] = "";
             }  // 302
               
           } // http >0
@@ -397,8 +408,8 @@ void handlebyte ( uint8_t b ) {
             String title = buffer;
             short pos = title.indexOf("-");
             if (pos>0) {
-              title1=title.substring(0,pos-1);
-              title2=title.substring(pos+1);
+              title1=utf8ascii(title.substring(0,pos-1));
+              title2=utf8ascii(title.substring(pos+1));
             }
             else
             {
@@ -455,4 +466,57 @@ void sendCommandString(String cmd)
     nexSerial.write(0xFF);
     nexSerial.write(0xFF);
     nexSerial.write(0xFF);
+}
+
+// ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******
+// http://playground.arduino.cc/main/Utf8ascii
+
+// Convert a single Character from UTF8 to Extended ASCII
+// Return "0" if a byte has to be ignored
+byte utf8asciibyte(byte ascii, byte &previousbyte) {
+    if ( ascii<128 )   // Standard ASCII-set 0..0x7F handling  
+    {   previousbyte=0; 
+        return( ascii ); 
+    }
+
+    // get previous input
+    byte last = previousbyte;   // get last char
+    previousbyte=ascii;         // remember actual character
+
+    switch (last)     // conversion depending on first UTF8-character
+    {   case 0xC2: return  (ascii);  break;
+        case 0xC3: return  (ascii | 0xC0);  break;
+        case 0x82: if(ascii==0xAC) return(0x80);       // special case Euro-symbol
+    }
+
+    return  (0);                                     // otherwise: return zero, if character has to be ignored
+}
+
+// convert String object from UTF8 String to Extended ASCII
+String utf8ascii(String s)
+{       
+        String r="";
+        byte previousbyte=0;
+        char c;
+        for (unsigned int i=0; i<s.length(); i++)
+        {
+                c = utf8asciibyte(s.charAt(i), previousbyte);
+                if (c!=0) r+=c;
+        }
+        return r;
+}
+
+// In Place conversion UTF8-string to Extended ASCII (ASCII is shorter!)
+void utf8ascii(char* s)
+{       
+        int k=0;
+        byte previousbyte=0;
+        char c;
+        for (unsigned int i=0; i<strlen(s); i++)
+        {
+                c = utf8asciibyte(s[i], previousbyte);
+                if (c!=0) 
+                        s[k++]=c;
+        }
+        s[k]=0;
 }

@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define DEBUG_BUFFER_SIZE 100
+#define DEBUG_BUFFER_SIZE 200
 
 typedef enum
 {

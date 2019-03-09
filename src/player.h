@@ -26,6 +26,11 @@ void playerbegin();
 void handlebyte ( uint8_t b );
 void sendCommand(const char* cmd);
 void sendCommandString(String cmd);
-String PreviousStation();
-String NextStation();
+String PreviousStationName();
+String NextStationName();
+void PreviousStation();
+void NextStation();
+void utf8ascii(char* s);
+String utf8ascii(String s);
+byte utf8asciibyte(byte ascii, byte &previousbyte);
 #endif

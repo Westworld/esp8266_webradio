@@ -19,7 +19,7 @@ char *Console::appendEntry(ConsoleLogLevel level, char *message)
                 break;
             case INFO:
                 Serial.print("[INF]");
-                Serial.print(" ");
+                Serial.print(" * ");
                 Serial.println(message);
                 break;
             case WARN:
