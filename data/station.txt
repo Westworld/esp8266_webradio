@@ -1,3 +1,8 @@
 Rockantenne	http://mp3channels.webradio.rockantenne.de/rockantenne
 Mainfranken	http://br-br1-mainfranken.cast.addradio.de/br/br1/mainfranken/mp3/56/stream.mp3
 TopFM	http://mp3.topfm.c.nmdn.net/ps-topfm/livestream.mp3
+COUNTRY 108 - Your Country Music	http://www.country108.com/listen.m3u
+countrymusic24	http://countrymusic24.powersender.de:9000
+101FM.de	http://stream.laut.fm/101fm
+afterhours Kanada	http://fr2.ah.fm:8000/192k
+cafe80	http://cafe80s.eu:8100/stream.mp3

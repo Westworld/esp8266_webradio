@@ -34,6 +34,8 @@ short VOLUME;
 bool DoNotReportError = false;
 long mediacounter = 0;
 long metaint;
+String lastStation="";
+short lastStationCounter=0;
 
 WiFiClient client;
 HTTPClient http;
@@ -150,6 +152,7 @@ String prepareHtmlPage() {
 void handleFileUpload(){ // upload a new file to the SPIFFS
   HTTPUpload& upload = server.upload();
   Console::info("handleFileUpload: %d", upload.status);
+  player.stopSong();
 
   if(upload.status == UPLOAD_FILE_START){
     String filename = upload.filename;
@@ -256,6 +259,19 @@ void Stream_Connect()
     title = "t3.txt=\" \"";
     sendCommandString(title);
 
+    if (lastStation == playlist[currentplaylist])  {
+      if (lastStationCounter++ > 10) {
+          Console::info("10 mal Fehler zu %s", playlist[currentplaylist].c_str()); 
+          NextStation();
+      }
+    }
+    else
+    {
+        lastStation = playlist[currentplaylist];
+        lastStationCounter = 0;
+    }
+    
+
     Console::info("connecting to %s", playlist[currentplaylist].c_str());  
     if (playlist[currentplaylist] == "")
               {
@@ -273,6 +289,32 @@ void Stream_Connect()
                     Console::info("connecting to %s", playlist[currentplaylist].c_str()); 
               }
 
+        // sonderfall URL = .m3u
+    short result = playlist[currentplaylist].indexOf(".m3u");
+    if (result>0) { 
+            Console::info("Sonderfall m3u"); 
+            http.begin(playlist[currentplaylist]);
+            int httpCode = http.GET();
+            //Console::info("Sonderfall m3u httpcode %d", httpCode); 
+            if (httpCode == 200) {
+              if (http.getSize()<1000) {
+                //Console::info("Sonderfall m3u size %d", http.getSize()); 
+                String httpresult = http.getString();
+                Console::info("Sonderfall downloaded %s", httpresult.c_str()); 
+                // nun Eintrag mit http suchen
+                playlist[currentplaylist] = M3U_FindStream(httpresult);
+                //Console::info("Sondefall neue URL %s", playlist[currentplaylist].c_str()); 
+              }
+              else
+              {
+                Console::info("Sonderfall m3u size failed %d", http.getSize()); 
+              }
+            }
+            else
+            {
+              Console::info("Sonderfall m3u http failed %d", httpCode);
+            }           
+        }
 
     if (playlist[currentplaylist] != "")  {
         // update buttons
@@ -293,6 +335,7 @@ void Stream_Connect()
                 Console::info("reconnecting to %s",uri.c_str()); 
                 http.end();
                 http.begin(uri);
+                http.addHeader("Icy-MetaData", "1");
                 Console::warn("overwriting playlist %s with '%s'",playlist[currentplaylist].c_str(), uri.c_str()); 
                 playlist[currentplaylist] = uri;
                 httpCode = http.GET();
@@ -332,10 +375,11 @@ void Stream_Connect()
 
            Console::info("audio-info: %s, genre: %s, name %s",ice_audio_info.c_str(),
                 icy_genre.c_str(), ice_name.c_str()); 
-
            String sendername = "t0.txt=\""+playliststation[currentplaylist] +"\"";
            sendCommandString(sendername); 
-           sendername = "t1.txt=\""+icy_genre+" "+ice_name+"\"";
+           sendername = "t2.txt=\""+icy_genre+" "+ice_name+"\"";
+           sendCommandString(sendername); 
+           sendername = "t1.txt=\""+ice_audio_info +"\"";
            sendCommandString(sendername); 
 
            client = http.getStream(); 
@@ -365,7 +409,6 @@ void Stream_Play() {
         handlebyte ( mp3buff[i] );
       }
       player.playChunk(mp3buff, bytesread);
-
     }
 }
 
@@ -413,7 +456,17 @@ void handlebyte ( uint8_t b ) {
             }
             else
             {
-              title1 = title;
+              pos = title.indexOf(":");
+              if (pos>0) {
+                title1=utf8ascii(title.substring(0,pos));
+                title2=utf8ascii(title.substring(pos+1));
+              }
+              else
+                title1 = utf8ascii(title);
+                if (title1.length()>33) {
+                  title2 = title1.substring(33);
+                  title1 = title1.substring(0,32);
+                }
             }
             title = "t2.txt=\""+title1 +"\"";
             sendCommandString(title);
@@ -519,4 +572,60 @@ void utf8ascii(char* s)
                         s[k++]=c;
         }
         s[k]=0;
+}
+
+String M3U_FindStream(String m3uString) {
+  /*
+  #EXTM3U
+  #EXTINF:-1, (COUNTRY•108 - Your Country Music)
+  http://icepool.silvacast.com/COUNTRY108.mp3
+  */
+
+  unsigned short von = 0, bis=0;
+  unsigned short lang = m3uString.length();
+  char curPos;
+  String playurl = "";
+
+  //Console::info("M3UFindStream %s", m3uString.c_str()); 
+
+  while (bis<lang) {
+    curPos = m3uString.charAt(bis);
+    if ((curPos == 10) || (curPos == 13)) {
+      // neue Zeile
+      if (m3uString.charAt(von) == '#') {
+        // Zeile ignorieren
+        //Console::info("zeile ignorieren %d %d",von, bis);
+        von = bis+1;
+      }
+      else {
+        Console::info("M3UFindStream %d %d %d", von, bis, lang); 
+        if (m3uString.charAt(von) == 'h') {
+          // gefunden
+          playurl = m3uString.substring(von, bis);
+          Console::info("playlist gefunden %s",playurl.c_str());
+          break;
+        }
+        else
+        {
+            von = bis+1;
+        }
+        
+      }
+    }
+    bis++;
+  }
+
+  if ((von > 0) && (bis >= lang)) {
+    playurl = m3uString.substring(von);
+    //Console::info("playlist in letzter Zeile gefunden %s",playurl.c_str());
+  }
+
+  if ((von == 0) && (bis >= lang)) {
+    playurl = m3uString;
+    //Console::info("playlist in einziger Zeile gefunden %s",playurl.c_str());
+  }
+
+  Console::info("playlist verwenden %s",playurl.c_str()); 
+
+  return playurl;
 }

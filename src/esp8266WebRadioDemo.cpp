@@ -167,7 +167,9 @@ void loop() {
 
   static short ButtonMessage=0;
 
-    ArduinoOTA.handle();
+    // ArduinoOTA.handle();
+    // disabled, Performance??
+    
     server.handleClient();
 
     Stream_Play();
