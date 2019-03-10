@@ -363,8 +363,8 @@ void Stream_Connect()
 
                       if (http.headerName(i) == "ice-audio-info")
                         ice_audio_info = http.header(i);
-                      else if (http.headerName(i) == "icy_genre")
-                        ice_audio_info = http.header(i);
+                      else if (http.headerName(i) == "icy-genre")
+                        icy_genre = http.header(i);
                       else if (http.headerName(i) == "ice_name")
                         ice_name = http.header(i);
                       else if (http.headerName(i) == "icy-metaint") {
@@ -384,6 +384,7 @@ void Stream_Connect()
 
            client = http.getStream(); 
            player.startSong();
+           mediacounter=0;
           } // http 200
     else
     {
@@ -405,11 +406,17 @@ void Stream_Play() {
       if(client.available() > 0){
         uint8_t bytesread = client.read(mp3buff, 32);
 
+        uint8_t goodbytes = 0;
+        uint8_t newbuffer[32];
+
+
         for (uint8_t i=0;i<bytesread;i++) {
-          handlebyte ( mp3buff[i] );
+          if( handlebyte ( mp3buff[i] )) {
+            newbuffer[goodbytes++] = mp3buff[i];
+          }
         }
-        
-        player.playChunk(mp3buff, bytesread);
+        player.playChunk(newbuffer, goodbytes);
+        //player.playChunk(mp3buff, bytesread);
       }
     }
 }
@@ -430,20 +437,29 @@ String getValue(String data, char separator, int index)
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
-void handlebyte ( uint8_t b ) {
-//  mediacounter++;
+
+uint8_t handlebyte ( uint8_t b ) {
+  mediacounter++;
+
+  if (mediacounter > metaint) {
+    long metablock = b*16;
+    Console::info("Metaint block size %d", metablock); 
+    mediacounter = -(metablock);
+  }
+
   if ((b == tagheader[tagsize]) || (tagsize > 11)) {
       tagvalue[tagcounter++] = b;
       if (tagsize <= 11) {  // "StreamTitle="
         tagsize++;
       }
       else {
+
         if ((tagcounter > 250) || (b == 0) || (b == 59)) {
           // wir haben einen Tag gefunden
           tagcounter-=2;
           if (tagcounter>14){
             tagvalue[tagcounter] = 0;
-//          Console::info("MP3 Tag gefunden pos %d", mediacounter); 
+
             Console::info("%s", &tagvalue[13]); 
 
             char buffer[200];
@@ -486,8 +502,12 @@ void handlebyte ( uint8_t b ) {
     tagsize = 0;
     tagcounter = 0;
   }
-}
 
+  if (mediacounter <=0)
+    return 0;
+  else
+    return 1; 
+}
 
 
 void sendCommand(const char* cmd)

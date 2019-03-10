@@ -23,7 +23,7 @@ String getValue(String data, char separator, int index);
 void Stream_Connect();
 void Stream_Play();
 void playerbegin();
-void handlebyte ( uint8_t b );
+uint8_t handlebyte ( uint8_t b );
 void sendCommand(const char* cmd);
 void sendCommandString(String cmd);
 String PreviousStationName();
