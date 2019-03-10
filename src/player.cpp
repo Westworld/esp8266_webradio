@@ -41,7 +41,7 @@ WiFiClient client;
 HTTPClient http;
 
 File fsUploadFile; 
-uint8_t mp3buff[32];
+static __attribute__((aligned(4))) uint8_t mp3buff[32];
 
 
 void playerbegin() {
@@ -401,14 +401,16 @@ void Stream_Play() {
         http.end();
         Stream_Connect();
     }
+    if (player.data_request()) {
+      if(client.available() > 0){
+        uint8_t bytesread = client.read(mp3buff, 32);
 
-    if(client.available() > 0){
-      uint8_t bytesread = client.read(mp3buff, 32);
-
-      for (uint8_t i=0;i<bytesread;i++) {
-        handlebyte ( mp3buff[i] );
+        for (uint8_t i=0;i<bytesread;i++) {
+          handlebyte ( mp3buff[i] );
+        }
+        
+        player.playChunk(mp3buff, bytesread);
       }
-      player.playChunk(mp3buff, bytesread);
     }
 }
 
