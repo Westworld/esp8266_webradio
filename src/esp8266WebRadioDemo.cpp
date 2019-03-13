@@ -1,10 +1,8 @@
 /**
-  A simple stream handler to play web radio stations using ESP8266
+   web radio  ESP8266
 
-  Copyright (C) 2018 Vince Gellár (github.com/vincegellar)
-  Licensed under GNU GPL v3
+based on code from ince Gellár (github.com/vincegellar)
   
-  Wiring:
   --------------------------------
   | VS1053  | ESP8266 |  Other   |
   --------------------------------
@@ -18,64 +16,45 @@
   |   5V    |    -    |   VCC    |
   |   GND   |    -    |   GND    |
   --------------------------------
+  D2+D4 Nextion
 
   Dependencies:
   -VS1053 library by baldram (https://github.com/baldram/ESP_VS1053_Library)
-  -ESP8266Wifi
-
-  To run this example define the platformio.ini as below.
-
-  [env:nodemcuv2]
-  platform = espressif8266
-  board = nodemcuv2
-  framework = arduino
-  build_flags = -D PIO_FRAMEWORK_ARDUINO_LWIP2_HIGHER_BANDWIDTH
-
-  lib_deps =
-    ESP_VS1053_Library
-
-  Instructions:
-  -Build the hardware
-    (please find an additional description and Fritzing's schematic here:
-     https://github.com/vincegellar/Simple-Radio-Node#wiring)
-  -Set the station in this file
-  -Upload the program
+  
 
   IDE Settings (Tools):
-  -IwIP Variant: v1.4 Higher Bandwidth  - v2 Higher Bandwidth läuft besser!
+  -IwIP Variant: v2 Higher Bandwidth läuft besser!
   -CPU Frequency: 160Hz
 */
 
 #include <Arduino.h>
+
+#include "Wiring.h"
 
 #include <ESP8266WiFi.h>
 #include <ArduinoOTA.h>
 
 #include <ESP8266WebServer.h>
 #include <Console.h>
+#include <nextion_light.h>
 
 #include "player.h"
 #include "esp8266WebRadioDemo.h"
-#include <SoftwareSerial.h>
 
-// pins defined in player.cpp
+// pins defined in wiring.h
     
 const char* wifihostname = "ESPRadio";
 
-
-
 ESP8266WebServer server(80); 
-
-SoftwareSerial nexSerial(D4, D2);
 
 void setup () {
     Console::begin();
     Console::line();
 
-    nexSerial.begin(9600);
-    sendCommandString("t0.txt=\"Radio\"");
-    sendCommandString("t1.txt=\"starte\"");
-    sendCommandString("t2.txt=\"verbindung\"");
+    Nextion::begin(9600);
+    Nextion::ShowText("t0.txt", "Radio");
+    Nextion::ShowText("t1.txt", "starte");
+    Nextion::ShowText("t2.txt", "Verbindung");
 
     // Wait for VS1053 and PAM8403 to power up
     // otherwise the system might not start up correctly
@@ -104,8 +83,8 @@ void setup () {
     IPAddress ip = WiFi.localIP();
     Console::info("IP Address: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]); 
     char buffer[100];
-    sprintf(buffer, "t0.txt=\"IP Address: %u.%u.%u.%u\"", ip[0], ip[1], ip[2], ip[3]); 
-    sendCommandString(buffer);
+    sprintf(buffer, "IP Address: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]); 
+    Nextion::ShowText("t0.txt", buffer);
 
     ArduinoOTA.setHostname(wifihostname);  
     
@@ -165,41 +144,21 @@ void setup () {
 
 void loop() {
 
-  static short ButtonMessage=0;
-
-    // ArduinoOTA.handle();
-    // disabled, Performance??
+    ArduinoOTA.handle();
     
     server.handleClient();
 
     Stream_Play();
 
-  if (nexSerial.available()) {  
-    short received = nexSerial.read();
-    
-    //Console::info("Serial %d %d", received, ButtonMessage);
-
-    if ((ButtonMessage==0) && (received == 101)) 
-      ButtonMessage++;
-    else 
-      if ((ButtonMessage==1) && (received == 0)) 
-        ButtonMessage++;
-        else 
-          if (ButtonMessage==2) {
-            if (received == 3) {
+     short received = Nextion::IsEvent();
+     if (received == 2) {
               Console::info("Next");
               NextStation();
-            }
-            else { 
+     }
+     else if (received == 1) { 
               Console::info("Previous");
               PreviousStation();
-            }
-            ButtonMessage=0;
-          }
-          else
-            ButtonMessage=0;
-
-    }
+      }
 }
 
 

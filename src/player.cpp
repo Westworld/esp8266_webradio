@@ -1,11 +1,10 @@
+#include "Wiring.h"
+
 #include <Console.h>
 
 #include "player.h"
-#include <SoftwareSerial.h>
+#include "nextion_light.h"
 
-#define VS1053_CS     D1
-#define VS1053_DCS    D0
-#define VS1053_DREQ   D3
 #define LOCATION "Location"
 
 
@@ -23,7 +22,6 @@ char  tagvalue[255];
 
 VS1053 player(VS1053_CS, VS1053_DCS, VS1053_DREQ);
 extern ESP8266WebServer server;
-extern SoftwareSerial nexSerial;
 
 String ice_audio_info, icy_genre, ice_name, streammetadata;
 String playlist[10];
@@ -254,10 +252,8 @@ void Stream_Connect()
     metaint = 0;
     http.end();
     player.stopSong();
-    String title = "t2.txt=\" \"";
-    sendCommandString(title);
-    title = "t3.txt=\" \"";
-    sendCommandString(title);
+    Nextion::ShowText("t2.txt", "");
+    Nextion::ShowText("t3.txt", "");
 
     if (lastStation == playlist[currentplaylist])  {
       if (lastStationCounter++ > 10) {
@@ -318,10 +314,8 @@ void Stream_Connect()
 
     if (playlist[currentplaylist] != "")  {
         // update buttons
-        String sendername = "b0.txt=\""+PreviousStationName() +"\"";
-        sendCommandString(sendername); 
-        sendername = "b1.txt=\""+NextStationName() +"\"";
-        sendCommandString(sendername); 
+        Nextion::ShowText("b0.txt", PreviousStationName());
+        Nextion::ShowText("b1.txt", NextStationName());
 
         http.collectHeaders(headerkeys,headerkeyssize);  
         http.begin(playlist[currentplaylist]);
@@ -375,12 +369,9 @@ void Stream_Connect()
 
            Console::info("audio-info: %s, genre: %s, name %s",ice_audio_info.c_str(),
                 icy_genre.c_str(), ice_name.c_str()); 
-           String sendername = "t0.txt=\""+playliststation[currentplaylist] +"\"";
-           sendCommandString(sendername); 
-           sendername = "t2.txt=\""+icy_genre+" "+ice_name+"\"";
-           sendCommandString(sendername); 
-           sendername = "t1.txt=\""+ice_audio_info +"\"";
-           sendCommandString(sendername); 
+           Nextion::ShowText("t0.txt", playliststation[currentplaylist]);    
+           Nextion::ShowText("t2.txt", icy_genre+" "+ice_name);    
+           Nextion::ShowText("t1.txt", ice_audio_info);    
 
            client = http.getStream(); 
            player.startSong();
@@ -416,7 +407,6 @@ void Stream_Play() {
           }
         }
         player.playChunk(newbuffer, goodbytes);
-        //player.playChunk(mp3buff, bytesread);
       }
     }
 }
@@ -469,27 +459,25 @@ uint8_t handlebyte ( uint8_t b ) {
             String title = buffer;
             short pos = title.indexOf("-");
             if (pos>0) {
-              title1=utf8ascii(title.substring(0,pos-1));
-              title2=utf8ascii(title.substring(pos+1));
+              title1=title.substring(0,pos-1);
+              title2=title.substring(pos+1);
             }
             else
             {
               pos = title.indexOf(":");
               if (pos>0) {
-                title1=utf8ascii(title.substring(0,pos));
-                title2=utf8ascii(title.substring(pos+1));
+                title1=title.substring(0,pos);
+                title2=title.substring(pos+1);
               }
               else
-                title1 = utf8ascii(title);
+                title1 = title;
                 if (title1.length()>33) {
                   title2 = title1.substring(33);
                   title1 = title1.substring(0,32);
                 }
             }
-            title = "t2.txt=\""+title1 +"\"";
-            sendCommandString(title);
-            title = "t3.txt=\""+title2 +"\"";
-            sendCommandString(title);
+            Nextion::ShowUTF8Text("t2.txt", title1);  
+            Nextion::ShowUTF8Text("t3.txt", title2);  
           }
           tagsize = 0;
           tagcounter = 0;
@@ -507,93 +495,6 @@ uint8_t handlebyte ( uint8_t b ) {
     return 0;
   else
     return 1; 
-}
-
-
-void sendCommand(const char* cmd)
-{
-   int incomingByte = 0;
-   
-   while (nexSerial.available())
-    {
-        incomingByte = nexSerial.read();
-    }
-    
-    nexSerial.print(cmd);
-    nexSerial.write(0xFF);
-    nexSerial.write(0xFF);
-    nexSerial.write(0xFF);
-}
-
-void sendCommandString(String cmd)
-{
-    int incomingByte = 0;
-    while (nexSerial.available())
-    {
-        incomingByte = nexSerial.read();
-    }
-
-    for (unsigned int i = 0; i < cmd.length(); i++)
-    {
-      nexSerial.write(cmd[i]);   // Push each char 1 by 1 on each loop pass
-    }
-  
-    nexSerial.write(0xFF);
-    nexSerial.write(0xFF);
-    nexSerial.write(0xFF);
-}
-
-// ****** UTF8-Decoder: convert UTF8-string to extended ASCII *******
-// http://playground.arduino.cc/main/Utf8ascii
-
-// Convert a single Character from UTF8 to Extended ASCII
-// Return "0" if a byte has to be ignored
-byte utf8asciibyte(byte ascii, byte &previousbyte) {
-    if ( ascii<128 )   // Standard ASCII-set 0..0x7F handling  
-    {   previousbyte=0; 
-        return( ascii ); 
-    }
-
-    // get previous input
-    byte last = previousbyte;   // get last char
-    previousbyte=ascii;         // remember actual character
-
-    switch (last)     // conversion depending on first UTF8-character
-    {   case 0xC2: return  (ascii);  break;
-        case 0xC3: return  (ascii | 0xC0);  break;
-        case 0x82: if(ascii==0xAC) return(0x80);       // special case Euro-symbol
-    }
-
-    return  (0);                                     // otherwise: return zero, if character has to be ignored
-}
-
-// convert String object from UTF8 String to Extended ASCII
-String utf8ascii(String s)
-{       
-        String r="";
-        byte previousbyte=0;
-        char c;
-        for (unsigned int i=0; i<s.length(); i++)
-        {
-                c = utf8asciibyte(s.charAt(i), previousbyte);
-                if (c!=0) r+=c;
-        }
-        return r;
-}
-
-// In Place conversion UTF8-string to Extended ASCII (ASCII is shorter!)
-void utf8ascii(char* s)
-{       
-        int k=0;
-        byte previousbyte=0;
-        char c;
-        for (unsigned int i=0; i<strlen(s); i++)
-        {
-                c = utf8asciibyte(s[i], previousbyte);
-                if (c!=0) 
-                        s[k++]=c;
-        }
-        s[k]=0;
 }
 
 String M3U_FindStream(String m3uString) {

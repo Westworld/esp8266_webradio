@@ -24,14 +24,10 @@ void Stream_Connect();
 void Stream_Play();
 void playerbegin();
 uint8_t handlebyte ( uint8_t b );
-void sendCommand(const char* cmd);
-void sendCommandString(String cmd);
 String PreviousStationName();
 String NextStationName();
 void PreviousStation();
 void NextStation();
-void utf8ascii(char* s);
-String utf8ascii(String s);
-byte utf8asciibyte(byte ascii, byte &previousbyte);
+
 String M3U_FindStream(String m3uString);
 #endif
